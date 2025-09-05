@@ -122,6 +122,63 @@ def calculate_customer_metrics(df, region_id=None):
     
     return metrics
 
+def calculate_load_profile_characteristics(df):
+    """
+    Calculate load profile characteristics for a region/customer
+    
+    Args:
+        df (pd.DataFrame): Analytics dataframe for specific region
+    
+    Returns:
+        dict: Load profile characteristics
+    """
+    if df is None or df.empty or 'TOTALDEMAND' not in df.columns:
+        return {}
+    
+    load_data = df['TOTALDEMAND'].dropna()
+    
+    if load_data.empty:
+        return {}
+    
+    characteristics = {
+        'peak_load': load_data.max(),
+        'min_load': load_data.min(),
+        'avg_load': load_data.mean(),
+        'load_factor': load_data.mean() / load_data.max() if load_data.max() > 0 else 0,
+        'load_variance': load_data.var(),
+        'load_std': load_data.std()
+    }
+    
+    # Add time-based patterns if DATE column exists
+    if 'DATE' in df.columns:
+        df_with_time = df.copy()
+        df_with_time['DATE'] = pd.to_datetime(df_with_time['DATE'])
+        df_with_time['hour'] = df_with_time['DATE'].dt.hour
+        df_with_time['weekday'] = df_with_time['DATE'].dt.dayofweek
+        
+        # Peak hours analysis
+        hourly_avg = df_with_time.groupby('hour')['TOTALDEMAND'].mean()
+        peak_hour = hourly_avg.idxmax()
+        off_peak_hour = hourly_avg.idxmin()
+        
+        characteristics.update({
+            'peak_hour': peak_hour,
+            'off_peak_hour': off_peak_hour,
+            'peak_hour_load': hourly_avg.max(),
+            'off_peak_hour_load': hourly_avg.min()
+        })
+        
+        # Weekday vs weekend
+        weekday_avg = df_with_time[df_with_time['weekday'] < 5]['TOTALDEMAND'].mean()
+        weekend_avg = df_with_time[df_with_time['weekday'] >= 5]['TOTALDEMAND'].mean()
+        
+        characteristics.update({
+            'weekday_avg_load': weekday_avg,
+            'weekend_avg_load': weekend_avg
+        })
+    
+    return characteristics
+
 def calculate_forecasting_metrics(actual, predicted):
     """
     Calculate forecasting accuracy metrics

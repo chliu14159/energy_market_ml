@@ -221,7 +221,7 @@ def main():
             poe_selection = st.selectbox("Select POE", ["POE10", "POE50", "POE90"], key="port_poe")
         
         # Create the detailed portfolio confidence bands chart
-        dates = pd.date_range(start=start_date, end=end_date, freq='30T')
+        dates = pd.date_range(start=start_date, end=end_date, freq='30min')
         
         # Generate realistic portfolio load patterns with daily/weekly cycles
         time_hours = np.array([(d.hour + d.minute/60) for d in dates])
