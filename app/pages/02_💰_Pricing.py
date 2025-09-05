@@ -79,6 +79,10 @@ def calculate_tariff_scenarios(load_profile):
     else:
         daily_load = pd.Series()
     
+    # Check if we have valid data
+    if daily_load.empty or len(daily_load) == 0:
+        return {}
+    
     # Basic calculations (annualized based on daily averages)
     annual_consumption_mwh = daily_load.sum() * (365 / len(daily_load)) * 24  # Convert MW*days to MWh (MW * days * 24h/day)
     peak_demand = daily_load.max()
