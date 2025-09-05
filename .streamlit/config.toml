@@ -1,0 +1,58 @@
+[global]
+
+# If false, makes your Streamlit app have a dark theme by default
+# Can be overridden by user theme preference
+dataFrameSerialization = "legacy"
+
+[server]
+# Port where the server will listen for client and browser connections
+port = 8501
+
+# Enables support for CORS headers, for added security
+enableCORS = false
+
+# Enables support for Cross Origin Resource Sharing (CORS) for all origins
+enableXsrfProtection = false
+
+# Max size, in megabytes, for files uploaded via the file uploader
+maxUploadSize = 200
+
+# Max size, in megabytes, of messages that can be sent via the WebSocket connection
+maxMessageSize = 200
+
+[browser]
+# Whether to send usage statistics to Streamlit
+gatherUsageStats = false
+
+# Configure the ability to share apps publicly via Streamlit Community Cloud
+serverAddress = "localhost"
+
+[theme]
+# The preset Streamlit theme that your custom theme inherits from
+base = "light"
+
+# Primary accent color for interactive elements
+primaryColor = "#FF6B6B"
+
+# Background color for the main content area
+backgroundColor = "#FFFFFF"
+
+# Background color used for the sidebar and most interactive widgets
+secondaryBackgroundColor = "#F0F2F6"
+
+# Color used for almost all text
+textColor = "#262730"
+
+# Font family for all text in the app. Can be "sans serif", "serif", or "monospace"
+font = "sans serif"
+
+[logger]
+# Level of logging: 'error', 'warning', 'info', or 'debug'
+level = "info"
+
+[deprecation]
+# Set to false to disable the deprecation warning for the file uploader encoding
+showfileUploaderEncoding = false
+
+# Set to false to disable the deprecation warning for using the global pyplot instance
+showPyplotGlobalUse = false
