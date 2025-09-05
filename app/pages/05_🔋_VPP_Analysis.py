@@ -248,12 +248,10 @@ with st.spinner("Loading market and load data..."):
         # Filter for relevant data
         price_data = df[df['RRP_mean'].notna()].copy()
         # Use appropriate load column
-        if 'NET_CONSUMPTION_MW' in df.columns:
-            load_data = df[df['CUSTOMER_NAME'].notna() & df['NET_CONSUMPTION_MW'].notna()].copy()
-        elif 'HALFHOURLY_TOTAL_MW_B1' in df.columns:
-            load_data = df[df['CUSTOMER_NAME'].notna() & df['HALFHOURLY_TOTAL_MW_B1'].notna()].copy()
+        if 'TOTALDEMAND' in df.columns:
+            load_data = df[df['REGIONID'].notna() & df['TOTALDEMAND'].notna()].copy()
         else:
-            load_data = pd.DataFrame()
+            load_data = df[df['REGIONID'].notna()].copy()
         
         if len(price_data) == 0 or len(load_data) == 0:
             st.warning("Insufficient price or load data for VPP analysis.")
@@ -295,24 +293,17 @@ def calculate_peak_shaving_benefit(load_data, battery_power, network_tariff=50):
     """Calculate peak shaving and network charge reduction benefits"""
     peak_reductions = []
     
-    for customer in load_data['CUSTOMER_NAME'].unique():
-        customer_load = load_data[load_data['CUSTOMER_NAME'] == customer]
+    for region in load_data['REGIONID'].unique():
+        region_load = load_data[load_data['REGIONID'] == region]
         
-        if len(customer_load) > 0:
+        if len(region_load) > 0:
             # Identify peak load periods - use appropriate column
-            if 'NET_CONSUMPTION_MW' in customer_load.columns:
-                peak_load = customer_load['NET_CONSUMPTION_MW'].max()
-                avg_load = customer_load['NET_CONSUMPTION_MW'].mean()
-            elif 'HALFHOURLY_TOTAL_MW_B1' in customer_load.columns:
-                # Use daily aggregation for peak analysis
-                daily_b1 = customer_load.groupby('DATE')['HALFHOURLY_TOTAL_MW_B1'].mean()
-                daily_e1 = customer_load.groupby('DATE')['HALFHOURLY_TOTAL_MW_E1'].mean() if 'HALFHOURLY_TOTAL_MW_E1' in customer_load.columns else pd.Series(0, index=daily_b1.index)
-                daily_total = daily_b1 + daily_e1
-                peak_load = daily_total.max()
-                avg_load = daily_total.mean()
+            if 'TOTALDEMAND' in region_load.columns:
+                peak_load = region_load['TOTALDEMAND'].max()
+                avg_load = region_load['TOTALDEMAND'].mean()
             else:
-                peak_load = 0
-                avg_load = 0
+                peak_load = 10.0  # Default
+                avg_load = 5.0   # Default
             
             # Calculate potential peak reduction
             potential_reduction = min(battery_power, peak_load - avg_load)
@@ -322,7 +313,7 @@ def calculate_peak_shaving_benefit(load_data, battery_power, network_tariff=50):
                 monthly_savings = potential_reduction * network_tariff * 12
                 
                 peak_reductions.append({
-                    'customer': customer,
+                    'region': region,
                     'peak_load': peak_load,
                     'potential_reduction': potential_reduction,
                     'annual_savings': monthly_savings

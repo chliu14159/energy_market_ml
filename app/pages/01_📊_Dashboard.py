@@ -123,29 +123,27 @@ def main():
     with tab1:
         st.subheader("Customer Portfolio Summary")
         
-        # Customer summary
-        customer_data = df[df['CUSTOMER_NAME'].notna()]
-        if not customer_data.empty:
+        # Regional summary
+        region_data = df[df['REGIONID'].notna()]
+        if not region_data.empty:
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**Customer Details**")
-                # Use appropriate load column
-                if 'NET_CONSUMPTION_MW' in customer_data.columns:
-                    load_col = 'NET_CONSUMPTION_MW'
-                elif 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-                    load_col = 'HALFHOURLY_TOTAL_MW_B1'
+                st.markdown("**Regional Details**")
+                # Use appropriate load column - TOTALDEMAND is our main metric
+                if 'TOTALDEMAND' in region_data.columns:
+                    load_col = 'TOTALDEMAND'
                 else:
                     load_col = None
                     
                 if load_col:
-                    customer_summary = customer_data.groupby('CUSTOMER_NAME').agg({
+                    regional_summary = region_data.groupby('REGIONID').agg({
                         load_col: ['count', 'mean', 'max'],
                         'DATE': ['min', 'max']
                     }).round(2)
-                    customer_summary.columns = ['Days', 'Avg Load', 'Peak Load', 'Start Date', 'End Date']
-                    st.dataframe(customer_summary, use_container_width=True)
+                    regional_summary.columns = ['Days', 'Avg Load', 'Peak Load', 'Start Date', 'End Date']
+                    st.dataframe(regional_summary, use_container_width=True)
             
             with col2:
                 st.markdown("**Portfolio Composition**")
@@ -175,16 +173,13 @@ def main():
     with tab2:
         st.subheader("Load Analysis")
         
-        customer_data = df[df['CUSTOMER_NAME'].notna()]
-        if not customer_data.empty:
+        region_data = df[df['REGIONID'].notna()]
+        if not region_data.empty:
             
             # Daily load trend
-            if 'NET_CONSUMPTION_MW' in customer_data.columns:
-                daily_load = customer_data.groupby('DATE')['NET_CONSUMPTION_MW'].mean().reset_index()
-                load_col = 'NET_CONSUMPTION_MW'
-            elif 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-                daily_load = customer_data.groupby('DATE')['HALFHOURLY_TOTAL_MW_B1'].mean().reset_index()
-                load_col = 'HALFHOURLY_TOTAL_MW_B1'
+            if 'TOTALDEMAND' in region_data.columns:
+                daily_load = region_data.groupby('DATE')['TOTALDEMAND'].mean().reset_index()
+                load_col = 'TOTALDEMAND'
             else:
                 daily_load = pd.DataFrame()
                 load_col = 'LOAD'

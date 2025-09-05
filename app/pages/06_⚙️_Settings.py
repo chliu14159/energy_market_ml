@@ -128,8 +128,8 @@ if setting_category == "Data Management":
                 latest_date = df['DATE'].max() if len(df) > 0 else "No data"
                 st.metric("Latest Data", str(latest_date)[:10])
             with col3:
-                customer_count = df['CUSTOMER_NAME'].nunique()
-                st.metric("Unique Customers", customer_count)
+                region_count = df['REGIONID'].nunique()
+                st.metric("Unique Regions", region_count)
             with col4:
                 data_coverage = (len(df.dropna()) / len(df) * 100) if len(df) > 0 else 0
                 st.metric("Data Coverage", f"{data_coverage:.1f}%")
