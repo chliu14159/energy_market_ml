@@ -21,278 +21,214 @@ def calculate_portfolio_metrics(df):
     if df is None or df.empty:
         return {}
     
-    # Customer data
-    customer_data = df[df['CUSTOMER_NAME'].notna()]
+    # Regional data (equivalent to customer data)
+    region_data = df[df['REGIONID'].notna()]
     
     # Weather data
-    weather_data = df[df['AIR_TEMP_mean'].notna()]
+    weather_data = df[df['AIR_TEMP'].notna()]
     
     # Trading data
-    trading_data = df[df['RRP_mean'].notna()]
+    trading_data = df[df['RRP'].notna()]
     
     metrics = {
-        'total_customers': customer_data['CUSTOMER_NAME'].nunique() if not customer_data.empty else 0,
+        'total_regions': region_data['REGIONID'].nunique() if not region_data.empty else 0,
         'total_records': len(df),
-        'customer_records': len(customer_data),
+        'region_records': len(region_data),
         'weather_records': len(weather_data),
         'trading_records': len(trading_data)
     }
     
     # Load metrics
-    if not customer_data.empty:
-        # Use NET_CONSUMPTION_MW or mean of available load columns
-        if 'NET_CONSUMPTION_MW' in customer_data.columns:
-            daily_load = customer_data.groupby('DATE')['NET_CONSUMPTION_MW'].mean()
-        elif 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-            # Mean B1 and E1 if available
-            load_cols = ['HALFHOURLY_TOTAL_MW_B1', 'HALFHOURLY_TOTAL_MW_E1']
-            available_load_cols = [col for col in load_cols if col in customer_data.columns]
-            if available_load_cols:
-                daily_load = customer_data.groupby('DATE')[available_load_cols].mean().sum(axis=1)
-            else:
-                daily_load = pd.Series()
+    if not region_data.empty:
+        # Use TOTALDEMAND as the main load metric
+        if 'TOTALDEMAND' in region_data.columns:
+            daily_load = region_data.groupby('DATE')['TOTALDEMAND'].mean()
         else:
-            daily_load = pd.Series()
-            
-        if not daily_load.empty:
-            metrics.update({
-                'avg_daily_load': daily_load.mean(),
-                'max_daily_load': daily_load.max(),
-                'min_daily_load': daily_load.min(),
-                'load_std': daily_load.std(),
-                'total_days': daily_load.count()
-            })
+            daily_load = pd.Series([0])
+        
+        metrics.update({
+            'avg_daily_load_mw': daily_load.mean(),
+            'max_daily_load_mw': daily_load.max(),
+            'min_daily_load_mw': daily_load.min(),
+            'load_volatility': daily_load.std()
+        })
     
-    # Data quality metrics
-    total_possible_records = len(df)
-    complete_records = len(df.dropna())
+    # Price metrics
+    if not trading_data.empty and 'RRP' in trading_data.columns:
+        daily_price = trading_data.groupby('DATE')['RRP'].mean()
+        
+        metrics.update({
+            'avg_daily_price': daily_price.mean(),
+            'max_daily_price': daily_price.max(),
+            'min_daily_price': daily_price.min(),
+            'price_volatility': daily_price.std()
+        })
     
-    metrics.update({
-        'data_coverage': (len(customer_data) / total_possible_records * 100) if total_possible_records > 0 else 0,
-        'data_quality_score': (complete_records / total_possible_records * 100) if total_possible_records > 0 else 0,
-        'weather_coverage': (len(weather_data) / total_possible_records * 100) if total_possible_records > 0 else 0
-    })
+    # Weather metrics
+    if not weather_data.empty and 'AIR_TEMP' in weather_data.columns:
+        daily_temp = weather_data.groupby('DATE')['AIR_TEMP'].mean()
+        
+        metrics.update({
+            'avg_temperature': daily_temp.mean(),
+            'max_temperature': daily_temp.max(),
+            'min_temperature': daily_temp.min()
+        })
     
     return metrics
 
-def calculate_customer_metrics(customer_data):
+def calculate_customer_metrics(df, region_id=None):
     """
-    Calculate customer-specific metrics
+    Calculate region-specific metrics
     
     Args:
-        customer_data (pd.DataFrame): Customer data
+        df (pd.DataFrame): Analytics dataframe
+        region_id (str): Region ID to filter by
     
     Returns:
-        dict: Customer metrics
-    """
-    if customer_data is None or customer_data.empty:
-        return {}
-    
-    # Daily aggregation - use appropriate load column
-    if 'NET_CONSUMPTION_MW' in customer_data.columns:
-        daily_load = customer_data.groupby('DATE')['NET_CONSUMPTION_MW'].mean()
-    elif 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-        load_cols = ['HALFHOURLY_TOTAL_MW_B1', 'HALFHOURLY_TOTAL_MW_E1']
-        available_load_cols = [col for col in load_cols if col in customer_data.columns]
-        if available_load_cols:
-            daily_load = customer_data.groupby('DATE')[available_load_cols].mean().sum(axis=1)
-        else:
-            daily_load = pd.Series()
-    else:
-        daily_load = pd.Series()
-    
-    if not daily_load.empty:
-        metrics = {
-            'avg_daily_consumption': daily_load.mean(),
-            'peak_daily_consumption': daily_load.max(),
-            'min_daily_consumption': daily_load.min(),
-            'consumption_volatility': daily_load.std(),
-            'total_consumption': daily_load.sum(),
-            'data_days': daily_load.count(),
-            'load_factor': daily_load.mean() / daily_load.max() if daily_load.max() > 0 else 0
-        }
-    else:
-        metrics = {}
-    
-    # Meter type breakdown - use appropriate columns
-    if 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-        b1_data = customer_data.groupby('DATE')['HALFHOURLY_TOTAL_MW_B1'].mean()
-        if 'HALFHOURLY_TOTAL_MW_E1' in customer_data.columns:
-            e1_data = customer_data.groupby('DATE')['HALFHOURLY_TOTAL_MW_E1'].mean()
-            metrics['meter_breakdown'] = {
-                'B1': {'mean': b1_data.mean(), 'max': b1_data.max(), 'count': len(b1_data)},
-                'E1': {'mean': e1_data.mean(), 'max': e1_data.max(), 'count': len(e1_data)}
-            }
-    
-    # Seasonal patterns
-    if not daily_load.empty:
-        customer_data_copy = customer_data.copy()
-        customer_data_copy['MONTH'] = customer_data_copy['DATE'].dt.month
-        if 'NET_CONSUMPTION_MW' in customer_data.columns:
-            monthly_avg = customer_data_copy.groupby('MONTH')['NET_CONSUMPTION_MW'].mean()
-        else:
-            monthly_avg = pd.Series()
-        if not monthly_avg.empty:
-            metrics['seasonal_pattern'] = monthly_avg.to_dict()
-    
-    return metrics
-
-def calculate_weather_correlation(df):
-    """
-    Calculate correlation between load and weather variables
-    
-    Args:
-        df (pd.DataFrame): Combined data with load and weather
-    
-    Returns:
-        dict: Correlation metrics
+        dict: Region metrics
     """
     if df is None or df.empty:
         return {}
     
-    # Filter to complete records
-    complete_data = df[
-        df['CUSTOMER_NAME'].notna() & 
-        df['AIR_TEMP_mean'].notna() & 
-        df['NET_CONSUMPTION_MW'].notna()
-    ]
-    
-    if complete_data.empty:
-        return {}
-    
-    # Daily aggregation
-    daily_data = complete_data.groupby('DATE').agg({
-        'NET_CONSUMPTION_MW': 'sum',
-        'AIR_TEMP_mean': 'first',
-        'APPARENT_TEMP_mean': 'first',
-        'HUMIDITY_mean': 'first',
-        'WIND_SPEED_mean': 'first'
-    })
-    
-    # Calculate correlations
-    correlations = {}
-    weather_vars = ['AIR_TEMP_mean', 'APPARENT_TEMP_mean', 'HUMIDITY_mean', 'WIND_SPEED_mean']
-    
-    for var in weather_vars:
-        if var in daily_data.columns:
-            corr = daily_data['NET_CONSUMPTION_MW'].corr(daily_data[var])
-            if not np.isnan(corr):
-                correlations[var] = corr
-    
-    return correlations
-
-def calculate_price_correlation(df):
-    """
-    Calculate correlation between load and electricity prices
-    
-    Args:
-        df (pd.DataFrame): Combined data with load and prices
-    
-    Returns:
-        dict: Price correlation metrics
-    """
-    if df is None or df.empty:
-        return {}
-    
-    # Filter to complete records
-    complete_data = df[
-        df['CUSTOMER_NAME'].notna() & 
-        df['RRP_mean'].notna() & 
-        df['NET_CONSUMPTION_MW'].notna()
-    ]
-    
-    if complete_data.empty:
-        return {}
-    
-    # Daily aggregation
-    daily_data = complete_data.groupby('DATE').agg({
-        'NET_CONSUMPTION_MW': 'sum',
-        'RRP_mean': 'first',
-        'RRP_max': 'first',
-        'RRP_min': 'first'
-    })
-    
-    # Calculate correlations
-    correlations = {}
-    price_vars = ['RRP_mean', 'RRP_max', 'RRP_min']
-    
-    for var in price_vars:
-        if var in daily_data.columns:
-            corr = daily_data['NET_CONSUMPTION_MW'].corr(daily_data[var])
-            if not np.isnan(corr):
-                correlations[var] = corr
-    
-    return correlations
-
-def calculate_load_profile_characteristics(customer_data):
-    """
-    Calculate load profile characteristics for pricing analysis
-    
-    Args:
-        customer_data (pd.DataFrame): Customer meter data
-    
-    Returns:
-        dict: Load profile characteristics
-    """
-    if customer_data is None or customer_data.empty:
-        return {}
-    
-    # Use appropriate load column
-    if 'NET_CONSUMPTION_MW' in customer_data.columns:
-        daily_load = customer_data.groupby('DATE')['NET_CONSUMPTION_MW'].mean()
-    elif 'HALFHOURLY_TOTAL_MW_B1' in customer_data.columns:
-        load_cols = ['HALFHOURLY_TOTAL_MW_B1', 'HALFHOURLY_TOTAL_MW_E1']
-        available_load_cols = [col for col in load_cols if col in customer_data.columns]
-        if available_load_cols:
-            daily_load = customer_data.groupby('DATE')[available_load_cols].mean().sum(axis=1)
-        else:
-            daily_load = pd.Series()
+    # Filter by region if specified
+    if region_id:
+        region_data = df[df['REGIONID'] == region_id]
     else:
-        daily_load = pd.Series()
+        region_data = df
     
-    if daily_load.empty:
+    if region_data.empty:
         return {}
     
-    # Basic statistics
-    characteristics = {
-        'average_load': daily_load.mean(),
-        'peak_load': daily_load.max(),
-        'base_load': daily_load.min(),
-        'load_factor': daily_load.mean() / daily_load.max() if daily_load.max() > 0 else 0,
-        'volatility': daily_load.std() / daily_load.mean() if daily_load.mean() > 0 else 0
+    metrics = {
+        'total_records': len(region_data),
+        'date_range': f"{region_data['DATE'].min()} to {region_data['DATE'].max()}"
     }
     
-    # Percentile analysis
-    percentiles = [10, 25, 50, 75, 90, 95, 99]
-    for p in percentiles:
-        characteristics[f'p{p}'] = daily_load.quantile(p/100)
-    
-    # Peak to average ratio
-    characteristics['peak_to_average_ratio'] = daily_load.max() / daily_load.mean() if daily_load.mean() > 0 else 0
-    
-    # Seasonal analysis
-    if not daily_load.empty:
-        # Create a dataframe with dates and daily loads for seasonal analysis
-        seasonal_df = pd.DataFrame({
-            'DATE': daily_load.index,
-            'DAILY_LOAD': daily_load.values
+    # Load metrics
+    if 'TOTALDEMAND' in region_data.columns:
+        metrics.update({
+            'avg_load_mw': region_data['TOTALDEMAND'].mean(),
+            'max_load_mw': region_data['TOTALDEMAND'].max(),
+            'min_load_mw': region_data['TOTALDEMAND'].min()
         })
-        
-        # Ensure DATE is datetime type
-        if not pd.api.types.is_datetime64_any_dtype(seasonal_df['DATE']):
-            seasonal_df['DATE'] = pd.to_datetime(seasonal_df['DATE'])
-        
-        seasonal_df['MONTH'] = seasonal_df['DATE'].dt.month
-        seasonal_df['SEASON'] = seasonal_df['MONTH'].map({
-            12: 'Summer', 1: 'Summer', 2: 'Summer',
-            3: 'Autumn', 4: 'Autumn', 5: 'Autumn',
-            6: 'Winter', 7: 'Winter', 8: 'Winter',
-            9: 'Spring', 10: 'Spring', 11: 'Spring'
+    
+    # Price metrics  
+    if 'RRP' in region_data.columns:
+        metrics.update({
+            'avg_price': region_data['RRP'].mean(),
+            'max_price': region_data['RRP'].max(),
+            'min_price': region_data['RRP'].min()
         })
-        
-        seasonal_load = seasonal_df.groupby('SEASON')['DAILY_LOAD'].mean()
-        characteristics['seasonal_variation'] = seasonal_load.to_dict()
+    
+    return metrics
+
+def calculate_forecasting_metrics(actual, predicted):
+    """
+    Calculate forecasting accuracy metrics
+    
+    Args:
+        actual (pd.Series): Actual values
+        predicted (pd.Series): Predicted values
+    
+    Returns:
+        dict: Forecasting metrics
+    """
+    if len(actual) == 0 or len(predicted) == 0:
+        return {}
+    
+    # Ensure same length
+    min_len = min(len(actual), len(predicted))
+    actual = actual[:min_len]
+    predicted = predicted[:min_len]
+    
+    # Remove any NaN values
+    mask = ~(np.isnan(actual) | np.isnan(predicted))
+    actual = actual[mask]
+    predicted = predicted[mask]
+    
+    if len(actual) == 0:
+        return {}
+    
+    # Calculate metrics
+    mae = np.mean(np.abs(actual - predicted))
+    mse = np.mean((actual - predicted) ** 2)
+    rmse = np.sqrt(mse)
+    mape = np.mean(np.abs((actual - predicted) / actual)) * 100
+    
+    # R-squared
+    ss_res = np.sum((actual - predicted) ** 2)
+    ss_tot = np.sum((actual - np.mean(actual)) ** 2)
+    r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+    
+    return {
+        'mae': mae,
+        'mse': mse,
+        'rmse': rmse,
+        'mape': mape,
+        'r2': r2,
+        'accuracy': max(0, 100 - mape)
+    }
+
+def calculate_weather_impact_metrics(df):
+    """
+    Calculate weather impact metrics
+    
+    Args:
+        df (pd.DataFrame): Analytics dataframe with weather data
+    
+    Returns:
+        dict: Weather impact metrics
+    """
+    if df is None or df.empty:
+        return {}
+    
+    metrics = {}
+    
+    # Temperature correlation with demand
+    if 'AIR_TEMP' in df.columns and 'TOTALDEMAND' in df.columns:
+        temp_corr = df['AIR_TEMP'].corr(df['TOTALDEMAND'])
+        metrics['temperature_demand_correlation'] = temp_corr
+    
+    # Weather variability
+    if 'AIR_TEMP' in df.columns:
+        metrics['temperature_variability'] = df['AIR_TEMP'].std()
+    
+    if 'HUMIDITY' in df.columns:
+        metrics['humidity_variability'] = df['HUMIDITY'].std()
+    
+    return metrics
+
+def calculate_savings_metrics(df, baseline_price=None):
+    """
+    Calculate potential savings metrics
+    
+    Args:
+        df (pd.DataFrame): Analytics dataframe
+        baseline_price (float): Baseline price for comparison
+    
+    Returns:
+        dict: Savings metrics
+    """
+    if df is None or df.empty or 'RRP' not in df.columns:
+        return {}
+    
+    if baseline_price is None:
+        baseline_price = df['RRP'].mean()
+    
+    # Calculate potential savings
+    current_avg_price = df['RRP'].mean()
+    savings_per_mwh = max(0, baseline_price - current_avg_price)
+    
+    if 'TOTALDEMAND' in df.columns:
+        total_demand = df['TOTALDEMAND'].sum()
+        total_savings = savings_per_mwh * total_demand
     else:
-        characteristics['seasonal_variation'] = {}
+        total_savings = 0
     
-    return characteristics
+    return {
+        'baseline_price': baseline_price,
+        'current_avg_price': current_avg_price,
+        'savings_per_mwh': savings_per_mwh,
+        'total_potential_savings': total_savings,
+        'savings_percentage': (savings_per_mwh / baseline_price * 100) if baseline_price > 0 else 0
+    }
