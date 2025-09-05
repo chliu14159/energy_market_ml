@@ -301,30 +301,29 @@ def main():
         # Weather data from the analytics data
         weather_data = df.copy()
         
-        # Check which weather columns are available
-        temp_cols = [col for col in ['AIR_TEMP_mean', 'AIR_TEMP_max', 'AIR_TEMP_min'] if col in weather_data.columns]
-        
-        if temp_cols and not weather_data.empty:
+        # Check if we have weather data
+        if 'AIR_TEMP' in weather_data.columns and not weather_data.empty:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Temperature trends - use actual daily values, not aggregated values
-                # The data already contains daily max, mean, min values from Archerfield
-                temp_data = weather_data[weather_data['STATION_NAME_first'] == 'Archerfield'].copy() if 'STATION_NAME_first' in weather_data.columns else weather_data.copy()
+                # Temperature trends - aggregate by date for display
+                daily_weather = weather_data.groupby('DATE').agg({
+                    'AIR_TEMP': ['mean', 'max', 'min'],
+                    'HUMIDITY': 'mean'
+                }).round(1)
+                daily_weather.columns = ['Avg_Temp', 'Max_Temp', 'Min_Temp', 'Avg_Humidity']
+                daily_weather = daily_weather.reset_index()
                 
                 fig_temp = go.Figure()
-                if 'AIR_TEMP_max' in temp_data.columns:
-                    fig_temp.add_trace(go.Scatter(x=temp_data['DATE'], y=temp_data['AIR_TEMP_max'], 
-                                               name='Daily Max Temp (Archerfield)', line=dict(color='red')))
-                if 'AIR_TEMP_mean' in temp_data.columns:
-                    fig_temp.add_trace(go.Scatter(x=temp_data['DATE'], y=temp_data['AIR_TEMP_mean'], 
-                                               name='Daily Mean Temp (Archerfield)', line=dict(color='orange')))
-                if 'AIR_TEMP_min' in temp_data.columns:
-                    fig_temp.add_trace(go.Scatter(x=temp_data['DATE'], y=temp_data['AIR_TEMP_min'], 
-                                               name='Daily Min Temp (Archerfield)', line=dict(color='blue')))
+                fig_temp.add_trace(go.Scatter(x=daily_weather['DATE'], y=daily_weather['Max_Temp'], 
+                                           name='Daily Max Temp', line=dict(color='red')))
+                fig_temp.add_trace(go.Scatter(x=daily_weather['DATE'], y=daily_weather['Avg_Temp'], 
+                                           name='Daily Mean Temp', line=dict(color='orange')))
+                fig_temp.add_trace(go.Scatter(x=daily_weather['DATE'], y=daily_weather['Min_Temp'], 
+                                           name='Daily Min Temp', line=dict(color='blue')))
                 
                 fig_temp.update_layout(
-                    title="Archerfield Daily Temperature Trends<br><sub>Direct from BOM weather station data</sub>", 
+                    title="Daily Temperature Trends", 
                     xaxis_title="Date", 
                     yaxis_title="Temperature (°C)", 
                     height=350
@@ -332,78 +331,62 @@ def main():
                 st.plotly_chart(fig_temp, use_container_width=True)
             
             with col2:
-                # Solar generation potential
-                if 'PV_POWER_mean' in weather_data.columns:
-                    daily_solar = weather_data.groupby('DATE')['PV_POWER_mean'].mean().reset_index()
+                # Humidity and other weather metrics
+                if 'HUMIDITY' in weather_data.columns:
+                    daily_humidity = weather_data.groupby('DATE')['HUMIDITY'].mean().reset_index()
                     
-                    fig_solar = px.line(daily_solar, x='DATE', y='PV_POWER_mean',
-                                      title="Solar Generation Potential", 
-                                      labels={'PV_POWER_mean': 'Solar Power (kW)', 'DATE': 'Date'})
-                    fig_solar.update_layout(height=350)
-                    st.plotly_chart(fig_solar, use_container_width=True)
+                    fig_humidity = px.line(daily_humidity, x='DATE', y='HUMIDITY',
+                                          title="Daily Average Humidity", 
+                                          labels={'HUMIDITY': 'Humidity (%)', 'DATE': 'Date'})
+                    fig_humidity.update_layout(height=350)
+                    st.plotly_chart(fig_humidity, use_container_width=True)
                 else:
-                    st.info("Solar data not available")
+                    st.info("Humidity data not available")
             
-            # Weather metrics from Archerfield station
-            archerfield_data = weather_data[weather_data['STATION_NAME_first'] == 'Archerfield'].copy() if 'STATION_NAME_first' in weather_data.columns else weather_data.copy()
-            
+            # Weather metrics summary
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                if 'AIR_TEMP_mean' in archerfield_data.columns:
-                    st.metric("Avg Daily Mean Temp", f"{archerfield_data['AIR_TEMP_mean'].mean():.1f}°C", help="Average of daily mean temperatures")
-                else:
-                    st.metric("Avg Daily Mean Temp", "N/A")
+                avg_temp = weather_data['AIR_TEMP'].mean()
+                st.metric("Average Temperature", f"{avg_temp:.1f}°C")
             with col2:
-                if 'AIR_TEMP_max' in archerfield_data.columns:
-                    st.metric("Highest Daily Max", f"{archerfield_data['AIR_TEMP_max'].max():.1f}°C", help="Highest daily maximum temperature recorded")
-                else:
-                    st.metric("Highest Daily Max", "N/A")
+                max_temp = weather_data['AIR_TEMP'].max()
+                st.metric("Max Temperature", f"{max_temp:.1f}°C")
             with col3:
-                if 'HUMIDITY_mean' in archerfield_data.columns:
-                    st.metric("Avg Humidity", f"{archerfield_data['HUMIDITY_mean'].mean():.0f}%", help="Average daily humidity")
-                else:
-                    st.metric("Avg Humidity", "N/A")
+                min_temp = weather_data['AIR_TEMP'].min()
+                st.metric("Min Temperature", f"{min_temp:.1f}°C")
             with col4:
-                if 'PV_POWER_mean' in archerfield_data.columns:
-                    st.metric("Avg Solar", f"{archerfield_data['PV_POWER_mean'].mean():.0f} kW", help="Average daily solar generation potential")
+                if 'HUMIDITY' in weather_data.columns:
+                    avg_humidity = weather_data['HUMIDITY'].mean()
+                    st.metric("Average Humidity", f"{avg_humidity:.1f}%")
                 else:
-                    st.metric("Avg Solar", "N/A")
-            
-            # Add data source info
-            st.info("📍 **Data Source**: Bureau of Meteorology (BOM) Archerfield weather station - daily temperature readings")
+                    st.metric("Humidity", "N/A")
         else:
-            st.warning("Weather data not available in current dataset")
+            st.warning("⚠️ Weather data not available in current dataset")
     
     with tab5:
         st.subheader("💰 Price Analysis")
         
         # Price data from the analytics data
         price_data = df.copy()
-        price_cols = [col for col in ['RRP_mean', 'RRP_max', 'RRP_min', 'RRP_std'] if col in price_data.columns]
         
-        if price_cols and not price_data.empty:
+        if 'RRP' in price_data.columns and not price_data.empty:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Price trends over time - only use available columns
-                agg_dict = {}
-                for col in price_cols:
-                    if col in ['RRP_mean', 'RRP_max', 'RRP_min']:
-                        agg_dict[col] = 'mean' if col == 'RRP_mean' else ('max' if col == 'RRP_max' else 'min')
+                # Price trends over time - aggregate RRP data by date
+                daily_prices = price_data.groupby('DATE').agg({
+                    'RRP': ['mean', 'max', 'min', 'std']
+                }).round(2)
+                daily_prices.columns = ['Avg_Price', 'Max_Price', 'Min_Price', 'Price_Volatility']
+                daily_prices = daily_prices.reset_index()
                 
-                if agg_dict:
-                    daily_prices = price_data.groupby('DATE').agg(agg_dict).reset_index()
-                    
-                    fig_price = go.Figure()
-                    if 'RRP_max' in daily_prices.columns:
-                        fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['RRP_max'], 
-                                                    name='Max Price', line=dict(color='red')))
-                    if 'RRP_mean' in daily_prices.columns:
-                        fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['RRP_mean'], 
-                                                    name='Avg Price', line=dict(color='blue')))
-                    if 'RRP_min' in daily_prices.columns:
-                        fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['RRP_min'], 
-                                                    name='Min Price', line=dict(color='green')))
+                fig_price = go.Figure()
+                fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['Max_Price'], 
+                                            name='Max Price', line=dict(color='red')))
+                fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['Avg_Price'], 
+                                            name='Avg Price', line=dict(color='blue')))
+                fig_price.add_trace(go.Scatter(x=daily_prices['DATE'], y=daily_prices['Min_Price'], 
+                                            name='Min Price', line=dict(color='green')))
                 
                 fig_price.update_layout(title="Daily Electricity Price Trends", xaxis_title="Date", 
                                       yaxis_title="Price ($/MWh)", height=350)
@@ -411,70 +394,37 @@ def main():
             
             with col2:
                 # Price distribution
-                fig_dist = px.histogram(price_data, x='RRP_mean', nbins=30,
+                fig_dist = px.histogram(price_data, x='RRP', nbins=50,
                                       title="Price Distribution", 
-                                      labels={'RRP_mean': 'Price ($/MWh)', 'count': 'Frequency'})
+                                      labels={'RRP': 'Price ($/MWh)', 'count': 'Frequency'})
                 fig_dist.update_layout(height=350)
                 st.plotly_chart(fig_dist, use_container_width=True)
             
             # Price volatility analysis
             st.markdown("#### Price Volatility Analysis")
-            daily_volatility = price_data.groupby('DATE')['RRP_std'].mean().reset_index()
             
-            if not daily_volatility.empty:
-                fig_vol = px.line(daily_volatility, x='DATE', y='RRP_std',
-                                title="Daily Price Volatility", 
-                                labels={'RRP_std': 'Price Volatility ($/MWh)', 'DATE': 'Date'})
-                fig_vol.update_layout(height=300)
-                st.plotly_chart(fig_vol, use_container_width=True)
+            fig_vol = px.line(daily_prices, x='DATE', y='Price_Volatility',
+                            title="Daily Price Volatility", 
+                            labels={'Price_Volatility': 'Price Volatility ($/MWh)', 'DATE': 'Date'})
+            fig_vol.update_layout(height=300)
+            st.plotly_chart(fig_vol, use_container_width=True)
             
             # Price metrics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                if 'RRP_mean' in price_data.columns:
-                    st.metric("Avg Price", f"${price_data['RRP_mean'].mean():.0f}/MWh")
-                else:
-                    st.metric("Avg Price", "N/A")
+                avg_price = price_data['RRP'].mean()
+                st.metric("Average Price", f"${avg_price:.2f}/MWh")
             with col2:
-                if 'RRP_max' in price_data.columns:
-                    st.metric("Max Price", f"${price_data['RRP_max'].max():.0f}/MWh")
-                else:
-                    st.metric("Max Price", "N/A")
+                max_price = price_data['RRP'].max()
+                st.metric("Max Price", f"${max_price:.2f}/MWh")
             with col3:
-                if 'RRP_min' in price_data.columns:
-                    st.metric("Min Price", f"${price_data['RRP_min'].min():.0f}/MWh")
-                else:
-                    st.metric("Min Price", "N/A")
+                min_price = price_data['RRP'].min()
+                st.metric("Min Price", f"${min_price:.2f}/MWh")
             with col4:
-                if 'RRP_std' in price_data.columns:
-                    st.metric("Price Volatility", f"${price_data['RRP_std'].mean():.0f}/MWh")
-                else:
-                    st.metric("Price Volatility", "N/A")
-                
-            # High price events
-            if 'RRP_max' in price_data.columns:
-                high_price_events = price_data[price_data['RRP_max'] > 200]
-                if not high_price_events.empty:
-                    st.markdown("#### High Price Events (>$200/MWh)")
-                    st.write(f"**{len(high_price_events)} high price events detected**")
-                    
-                    event_agg = {'RRP_max': 'max'}
-                    if 'RRP_mean' in price_data.columns:
-                        event_agg['RRP_mean'] = 'mean'
-                    
-                    event_summary = high_price_events.groupby('DATE').agg(event_agg).reset_index().sort_values('RRP_max', ascending=False).head(10)
-                    
-                    format_dict = {'RRP_max': "${:.0f}"}
-                    if 'RRP_mean' in event_summary.columns:
-                        format_dict['RRP_mean'] = "${:.0f}"
-                    
-                    st.dataframe(event_summary.style.format(format_dict), use_container_width=True)
-                else:
-                    st.info("No high price events (>$200/MWh) in current dataset")
-            else:
-                st.info("Price data not available for high price event analysis")
+                price_volatility = price_data['RRP'].std()
+                st.metric("Price Volatility", f"${price_volatility:.2f}/MWh")
         else:
-            st.warning("Price data not available in current dataset")
+            st.warning("⚠️ Price data not available in current dataset")
     
     # Navigation helpers
     st.markdown("---")
